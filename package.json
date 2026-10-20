@@ -16,6 +16,7 @@
     "@capacitor-community/sqlite": "^8.1.1",
     "@capacitor-community/text-to-speech": "^8.0.2",
     "@capacitor/core": "^8.5.3",
+    "@capacitor/filesystem": "^8.1.5",
     "@capacitor/preferences": "^8.0.1",
     "next": "^15.5.28",
     "papaparse": "^5.7.0",

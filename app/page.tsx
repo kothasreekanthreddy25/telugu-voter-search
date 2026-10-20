@@ -1,5 +1,6 @@
 'use client';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { cardSrc } from '@/lib/cards';
 import { getDb } from '@/lib/db';
 import { parseCommand } from '@/lib/command';
 import { parseChoice } from '@/lib/text';
@@ -123,11 +124,18 @@ export default function Home() {
         <section aria-label="Matches" className="space-y-2">
           <p className="text-sm text-slate-600">{results.length} matches. Say a field to narrow (house number, father/husband name, part number), or say/tap a number.</p>
           {results.map((v, i) => (
+            v.img ? (
+              <button key={v.id} onClick={() => showVoter(v)} className="block w-full space-y-1 rounded-xl bg-white p-2 text-left shadow-sm">
+                <span className="flex items-center gap-2 text-sm"><span className="flex h-7 w-7 items-center justify-center rounded-full bg-indigo-600 text-white">{i + 1}</span><b>{where(v)}</b></span>
+                <CardImage path={v.img} className="w-full rounded border" />
+              </button>
+            ) : (
             <button key={v.id} onClick={() => showVoter(v)} className="flex w-full items-center gap-3 rounded-xl bg-white p-3 text-left shadow-sm">
               <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-sm text-white">{i + 1}</span>
               <span className="min-w-0"><b className="block truncate">{v.name}</b>
                 <span className="block truncate text-xs text-slate-500">{[v.relation, v.house && `ఇల్లు ${v.house}`, v.part && `పార్ట్ ${v.part}`, v.serial && `క్రమ ${v.serial}`].filter(Boolean).join(' · ')}</span></span>
             </button>
+            )
           ))}
         </section>
       )}
@@ -135,11 +143,34 @@ export default function Home() {
   );
 }
 
+function CardImage({ path, className }: { path: string; className?: string }) {
+  const [src, setSrc] = useState<string | null>(null);
+  useEffect(() => { let on = true; cardSrc(path).then((s) => on && setSrc(s)); return () => { on = false; }; }, [path]);
+  return src ? <img src={src} alt="Voter card" className={className} /> : <div className={`${className ?? ''} aspect-[7/3] animate-pulse bg-slate-200`} />;
+}
+
+const where = (v: Voter) => `పేజీ ${v.page} · వరుస ${v.row} · కాలమ్ ${v.col} · క్రమ సంఖ్య ${v.serial}`;
+
 function VoterCard({ v, big, onSpeak }: { v: Voter; big?: boolean; onSpeak: () => void }) {
   const rows: [string, string][] = [
     ['పేరు', v.name], ['తండ్రి/భర్త', v.relation], ['పార్ట్ నంబర్', v.part], ['క్రమ సంఖ్య', v.serial],
     ['ఇంటి నంబర్', v.house], ['పోలింగ్ కేంద్రం', v.station], ['ఓటరు ఐడి', v.voterId],
   ];
+  if (v.img) {
+    return (
+      <section className="space-y-3 rounded-2xl bg-white p-3 shadow">
+        <CardImage path={v.img} className="w-full rounded-lg border" />
+        <dl className="grid grid-cols-3 gap-2 text-center">
+          {([['పేజీ', v.page], ['వరుస', v.row], ['కాలమ్', v.col], ['క్రమ సంఖ్య', v.serial]] as const).map(([k, val], i) => (
+            <div key={k} className={`rounded-xl bg-indigo-50 py-2 ${i === 3 ? 'col-span-3' : ''}`}>
+              <dt className="text-xs text-slate-600">{k}</dt><dd className="text-2xl font-bold text-indigo-700">{val}</dd>
+            </div>
+          ))}
+        </dl>
+        <button onClick={onSpeak} className="w-full rounded-xl border border-indigo-600 py-2 text-indigo-700">🔊 మళ్ళీ చెప్పు · Repeat</button>
+      </section>
+    );
+  }
   return (
     <section className={`rounded-2xl bg-white p-4 shadow ${big ? 'text-lg' : ''}`}>
       <dl className="space-y-1">

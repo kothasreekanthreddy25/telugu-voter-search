@@ -32,8 +32,8 @@ test('import mapping + validation', () => {
   const v = toVoters({ headers, rows: [['1', 'రాము', 'వెంకయ్య', '5', 'abc1', '2'], ['2', '', '', '', '', ''], ['3', 'రాము', 'వెంకయ్య', '5', 'ABC1', '2']] }, m);
   assert.equal(v.voters.length, 1); assert.equal(v.skipped, 1); assert.equal(v.duplicates, 1);
 });
-test('where clause escapes wildcards', () => {
-  const w = buildWhere({ name: '50%', voterId: 'x1' });
-  assert.ok(w.params.includes('%50' + String.fromCharCode(92) + '%%'));
-  assert.equal(buildWhere({}).sql, '0');
+test('where clause is exact-match only', () => {
+  const w = buildWhere({ house: ' 7-132 ', voterId: 'x1', name: 'ignored here' });
+  assert.deepEqual(w.params, ['X1', '7-132']);
+  assert.equal(buildWhere({}).sql, '1');
 });

@@ -59,3 +59,7 @@ export async function biometricUnlock(): Promise<boolean> {
 
 export const biometricEnabled = async () => (await get('biometric')) === '1';
 export const setBiometricEnabled = (on: boolean) => set('biometric', on ? '1' : '0');
+
+/** The admin PIN is optional: first-time users can skip it and set one later in Settings. */
+export const setupSkipped = async () => (await get('setup-skipped')) === '1';
+export const skipSetup = () => set('setup-skipped', '1');

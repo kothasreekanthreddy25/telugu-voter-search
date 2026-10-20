@@ -77,54 +77,9 @@ export async function readExcel(file: File): Promise<Table> {
   return finish(XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1, raw: false, defval: '' }));
 }
 
-/** Text-based PDFs only: rebuilds rows from text positions. Scanned PDFs need OCR (next phase). */
-export async function readPdf(file: File, onPage?: (p: number, total: number) => void): Promise<Table> {
-  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
-  pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/legacy/build/pdf.worker.min.mjs', import.meta.url).toString();
-  const pdf = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
-  const grid: string[][] = [];
-  let chars = 0;
-  type Item = { str: string; x: number; y: number; w: number };
-  for (let p = 1; p <= pdf.numPages; p++) {
-    const page = await pdf.getPage(p);
-    const content = await page.getTextContent();
-    const items: Item[] = (content.items as any[])
-      .filter((i) => 'str' in i && i.str.trim())
-      .map((i) => ({ str: i.str, x: i.transform[4], y: i.transform[5], w: i.width }));
-    chars += items.reduce((n, i) => n + i.str.length, 0);
-    items.sort((a, b) => b.y - a.y || a.x - b.x);
-    let line: Item[] = [];
-    const flush = () => {
-      if (!line.length) return;
-      line.sort((a, b) => a.x - b.x);
-      const cells: string[] = [];
-      let prevEnd = -Infinity;
-      for (const it of line) {
-        if (!cells.length) cells.push(it.str);
-        else if (it.x - prevEnd > 8) cells.push(it.str); // wide gap = new cell
-        else cells[cells.length - 1] += ' ' + it.str;
-        prevEnd = it.x + it.w;
-      }
-      grid.push(cells);
-      line = [];
-    };
-    let lastY: number | null = null;
-    for (const it of items) {
-      if (lastY !== null && Math.abs(it.y - lastY) > 3) flush();
-      line.push(it);
-      lastY = it.y;
-    }
-    flush();
-    onPage?.(p, pdf.numPages);
-  }
-  if (chars < 20) throw new Error('No text found. This looks like a scanned PDF; OCR is not included in this version.');
-  return finish(grid);
-}
-
-export async function readFile(file: File, onPage?: (p: number, t: number) => void): Promise<Table> {
+export async function readFile(file: File): Promise<Table> {
   const ext = file.name.toLowerCase().split('.').pop();
   if (ext === 'csv' || ext === 'txt') return readCsv(file);
   if (ext === 'xlsx' || ext === 'xls') return readExcel(file);
-  if (ext === 'pdf') return readPdf(file, onPage);
-  throw new Error('Unsupported file type. Use CSV, Excel or PDF.');
+  throw new Error('Unsupported file type. Use CSV or Excel.');
 }

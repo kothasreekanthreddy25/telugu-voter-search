@@ -1,19 +1,77 @@
 'use client';
-import { useMemo, useState } from 'react';
-import { AdminGate } from '@/components/Session';
+import { useMemo, useRef, useState } from 'react';
+import { indexRoll, type IndexProgress } from '@/lib/rollindex';
 import { FIELD_LABELS, guessMapping, readFile, toVoters, type FieldKey, type Mapping, type Table } from '@/lib/import';
 import { getDb } from '@/lib/db';
 
 export default function ImportPage() {
   return (
-    <main className="space-y-4 p-5">
-      <h1 className="text-xl font-bold">Import voter list</h1>
-      <AdminGate><Importer /></AdminGate>
+    <main className="space-y-5 p-5">
+      <h1 className="text-xl font-bold">ఓటర్ల జాబితా · Add voter list</h1>
+      <PdfImporter />
+      <details className="rounded-2xl bg-white p-4 shadow-sm">
+        <summary className="cursor-pointer font-medium text-slate-700">Other formats (Excel / CSV)</summary>
+        <div className="mt-4"><SheetImporter /></div>
+      </details>
     </main>
   );
 }
 
-function Importer() {
+function PdfImporter() {
+  const [busy, setBusy] = useState(false);
+  const [file, setFile] = useState<File | null>(null);
+  const [prog, setProg] = useState<IndexProgress | null>(null);
+  const [error, setError] = useState('');
+  const [done, setDone] = useState('');
+  const cancel = useRef(false);
+
+  async function start(f: File | undefined) {
+    if (!f) return;
+    setFile(f); setError(''); setDone(''); setProg(null); setBusy(true); cancel.current = false;
+    let lock: { release: () => Promise<void> } | null = null;
+    try { lock = await (navigator as any).wakeLock?.request('screen'); } catch { /* optional */ }
+    const db = await getDb();
+    const listId = await db.createList(f.name.replace(/\.pdf$/i, ''));
+    try {
+      const voters = await indexRoll(f, listId, setProg, () => cancel.current);
+      await db.appendVoters(listId, voters);
+      setDone(`${voters.length} ఓటర్లు చేర్చబడ్డారు · ${voters.length} voters added. Go to Search.`);
+    } catch (e) {
+      await db.deleteList(listId);
+      const m = (e as Error).message;
+      setError(m === 'UNSUPPORTED_LAYOUT'
+        ? 'This PDF does not look like a voter-card list, so it could not be read. Try an Excel/CSV file below.'
+        : m === 'Cancelled' ? 'Cancelled.' : `Could not read this PDF: ${m}`);
+    }
+    await lock?.release().catch(() => {});
+    setBusy(false);
+  }
+
+  return (
+    <section className="space-y-4 rounded-2xl bg-white p-5 text-center shadow-sm">
+      <label className={`block rounded-2xl bg-indigo-600 px-4 py-5 text-lg font-semibold text-white ${busy ? 'opacity-50' : 'active:scale-95'}`}>
+        📄 PDF ఫైల్ ఎంచుకోండి<br /><span className="text-sm font-normal">Choose voter list PDF</span>
+        <input type="file" className="hidden" disabled={busy}
+          accept=".pdf,application/pdf"
+          onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; start(f); }} />
+      </label>
+      {file && <p className="text-sm text-slate-600">Selected: <b>{file.name}</b> ({(file.size / 1048576).toFixed(1)} MB)</p>}
+      {busy && (
+        <div className="space-y-2" aria-live="polite">
+          <div className="h-3 overflow-hidden rounded-full bg-slate-200">
+            <div className="h-full bg-indigo-600 transition-all" style={{ width: `${prog ? (prog.page / prog.total) * 100 : 3}%` }} />
+          </div>
+          <p className="text-sm">{prog ? `పేజీ ${prog.page} / ${prog.total} · ${prog.cards} voters` : 'Opening file…'}</p>
+          <p className="text-xs text-slate-500">This happens once. Keep the screen on and do not close the app.</p>
+          <button onClick={() => { cancel.current = true; }} className="text-sm text-red-600 underline">Cancel</button>
+        </div>
+      )}
+      {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+      {done && <p className="rounded-xl bg-green-50 p-3 text-sm text-green-800">{done}</p>}
+    </section>
+  );
+}
+function SheetImporter() {
   const [file, setFile] = useState<File | null>(null);
   const [table, setTable] = useState<Table | null>(null);
   const [mapping, setMapping] = useState<Mapping | null>(null);
@@ -29,7 +87,7 @@ function Importer() {
     if (!f) return;
     setError(''); setDone(''); setTable(null); setFile(f); setBusy(true); setProgress('Reading file…');
     try {
-      const t = await readFile(f, (p, n) => setProgress(`Reading PDF page ${p} of ${n}…`));
+      const t = await readFile(f);
       setTable(t);
       setMapping(guessMapping(t.headers));
       setListName(f.name.replace(/\.[^.]+$/, ''));
@@ -59,9 +117,9 @@ function Importer() {
   return (
     <div className="space-y-4">
       <label className="block rounded-2xl border-2 border-dashed border-slate-300 bg-white p-6 text-center">
-        <span className="font-medium">Choose CSV, Excel or text-based PDF</span>
+        <span className="font-medium">Choose a CSV or Excel file</span>
         <input type="file" className="mt-3 block w-full text-sm"
-          accept=".csv,.txt,.xlsx,.xls,.pdf,text/csv,text/plain,text/comma-separated-values,application/csv,application/pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/octet-stream"
+          accept=".csv,.txt,.xlsx,.xls,text/csv,text/plain,text/comma-separated-values,application/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/octet-stream"
           onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; pick(f); }} />
       </label>
       {file && <p className="rounded-xl bg-white p-3 text-sm">Selected: <b>{file.name}</b> ({Math.round(file.size / 1024)} KB)</p>}

@@ -104,6 +104,8 @@ export const phrases = {
 };
 
 export function describeVoter(v: Voter): string {
+  // Card from a PDF roll: tell the person where to find it in the printed list.
+  if (v.pdfPage) return `పేజీ నంబర్ ${v.page}. కాలమ్ ${v.col}. క్రమ సంఖ్య ${v.serial}.`;
   const parts = [v.name];
   if (v.relation) parts.push(`తండ్రి లేదా భర్త పేరు ${v.relation}`);
   if (v.part) parts.push(`పార్ట్ నంబర్ ${v.part}`);

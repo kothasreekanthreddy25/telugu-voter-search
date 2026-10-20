@@ -1,6 +1,6 @@
 'use client';
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
-import { biometricAvailable, biometricEnabled, biometricUnlock, hasPin, setPin, verifyPin, type Role } from '@/lib/auth';
+import { biometricAvailable, biometricEnabled, biometricUnlock, hasPin, setPin, setupSkipped, skipSetup, verifyPin, type Role } from '@/lib/auth';
 
 interface Ctx { admin: boolean; unlockAdmin: (pin: string) => Promise<boolean>; lockAdmin: () => void; lockAll: () => void }
 const SessionCtx = createContext<Ctx | null>(null);
@@ -37,7 +37,7 @@ export function Session({ children }: { children: ReactNode }) {
   const [bio, setBio] = useState(false);
 
   const evaluate = useCallback(async () => {
-    if (!(await hasPin('admin'))) return setPhase('setup');
+    if (!(await hasPin('admin')) && !(await setupSkipped())) return setPhase('setup');
     if (await hasPin('team')) {
       setPhase('locked');
       if ((await biometricEnabled()) && (await biometricAvailable()) && (await biometricUnlock())) setPhase('open');
@@ -65,9 +65,10 @@ export function Session({ children }: { children: ReactNode }) {
 
   if (phase === 'setup')
     return (
-      <Center title="Set admin PIN" sub="First-time setup. The admin PIN protects imports, deletion and security settings.">
+      <Center title="Set a PIN" sub="Recommended. A PIN protects deleting voter lists and the security settings. You can skip this and set it later in Settings.">
         <PinField label="Choose a 4–8 digit admin PIN" submitText="Save PIN"
           onSubmit={async (pin) => { try { await setPin('admin', pin); setAdmin(true); setPhase('open'); } catch (e) { return (e as Error).message; } }} />
+        <button onClick={async () => { await skipSetup(); setPhase('open'); }} className="w-full rounded-xl border border-slate-300 py-3 text-slate-700">Skip for now</button>
       </Center>
     );
 
@@ -99,7 +100,10 @@ function Center({ title, sub, children }: { title: string; sub: string; children
 /** Wraps admin-only screens. */
 export function AdminGate({ children }: { children: ReactNode }) {
   const { admin, unlockAdmin } = useSession();
-  if (admin) return <>{children}</>;
+  const [pinSet, setPinSet] = useState<boolean | null>(null);
+  useEffect(() => { hasPin('admin').then(setPinSet); }, []);
+  if (pinSet === null) return null;
+  if (admin || !pinSet) return <>{children}</>;
   return (
     <div className="mx-auto max-w-sm space-y-3 rounded-2xl bg-white p-6 shadow">
       <h2 className="text-lg font-semibold">Admin access required</h2>
