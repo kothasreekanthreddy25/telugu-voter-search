@@ -47,7 +47,7 @@ function Importer() {
       const total = validation.voters.length;
       await db.addList(listName || file!.name, validation.voters, (n) => setProgress(`Saving ${n} / ${total}…`));
       setDone(`Imported ${total} records.`);
-      setTable(null); setFile(null);
+      setTable(null);
     } catch (e) {
       setError(`Import failed and was rolled back: ${(e as Error).message}`);
     }
@@ -60,9 +60,12 @@ function Importer() {
     <div className="space-y-4">
       <label className="block rounded-2xl border-2 border-dashed border-slate-300 bg-white p-6 text-center">
         <span className="font-medium">Choose CSV, Excel or text-based PDF</span>
-        <input type="file" accept=".csv,.txt,.xlsx,.xls,.pdf" className="mt-3 block w-full text-sm" disabled={busy} onChange={(e) => pick(e.target.files?.[0])} />
+        <input type="file" className="mt-3 block w-full text-sm"
+          accept=".csv,.txt,.xlsx,.xls,.pdf,text/csv,text/plain,text/comma-separated-values,application/csv,application/pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/octet-stream"
+          onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; pick(f); }} />
       </label>
-      {progress && <p className="text-sm text-slate-600" aria-live="polite">{progress}</p>}
+      {file && <p className="rounded-xl bg-white p-3 text-sm">Selected: <b>{file.name}</b> ({Math.round(file.size / 1024)} KB)</p>}
+      {progress &&<p className="text-sm text-slate-600" aria-live="polite">{progress}</p>}
       {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
       {done && <p className="rounded-xl bg-green-50 p-3 text-sm text-green-800">{done}</p>}
 
