@@ -9,3 +9,4 @@ android/local.properties
 out/
 tools/roll-to-csv/lang/*.traineddata
 *.csv
+tools/roll-to-csv/tel.traineddata
