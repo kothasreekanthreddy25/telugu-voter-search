@@ -1,0 +1,7 @@
+{
+  "name": "roll-to-csv",
+  "private": true,
+  "type": "module",
+  "description": "Converts a card-style AP panchayat voter roll PDF into a CSV for the app",
+  "dependencies": { "@napi-rs/canvas": "^0.1.0", "pdfjs-dist": "^5.0.0", "tesseract.js": "^6.0.0" }
+}
