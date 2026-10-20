@@ -1,0 +1,4 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+body { background: #f1f5f9; font-family: system-ui, 'Noto Sans Telugu', sans-serif; }
