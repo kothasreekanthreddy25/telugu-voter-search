@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import { cardSrc } from '@/lib/cards';
+import { getSnippet } from '@/lib/snippet';
 import { getDb } from '@/lib/db';
 import { parseCommand } from '@/lib/command';
 import { parseChoice } from '@/lib/text';
@@ -20,6 +20,7 @@ export default function Home() {
   const [results, setResults] = useState<Voter[]>([]);
   const [selected, setSelected] = useState<Voter | null>(null);
   const [typed, setTyped] = useState('');
+  const [showAll, setShowAll] = useState(false);
   const busy = useRef(false);
 
   const say = async (text: string) => { setMessage(text); await speak(text).catch(() => {}); };
@@ -53,6 +54,7 @@ export default function Home() {
         return;
       }
       setFilters(next);
+      setShowAll(false);
       setResults(found);
       setSelected(null);
       if (found.length === 1) await showVoter(found[0]);
@@ -123,11 +125,11 @@ export default function Home() {
       {!selected && results.length > 1 && (
         <section aria-label="Matches" className="space-y-2">
           <p className="text-sm text-slate-600">{results.length} matches. Say a field to narrow (house number, father/husband name, part number), or say/tap a number.</p>
-          {results.map((v, i) => (
+          {(showAll ? results : results.slice(0, 10)).map((v, i) => (
             v.img ? (
               <button key={v.id} onClick={() => showVoter(v)} className="block w-full space-y-1 rounded-xl bg-white p-2 text-left shadow-sm">
                 <span className="flex items-center gap-2 text-sm"><span className="flex h-7 w-7 items-center justify-center rounded-full bg-indigo-600 text-white">{i + 1}</span><b>{where(v)}</b></span>
-                <CardImage path={v.img} className="w-full rounded border" />
+                <CardImage v={v} className="w-full rounded border" />
               </button>
             ) : (
             <button key={v.id} onClick={() => showVoter(v)} className="flex w-full items-center gap-3 rounded-xl bg-white p-3 text-left shadow-sm">
@@ -137,15 +139,16 @@ export default function Home() {
             </button>
             )
           ))}
+          {!showAll && results.length > 10 && <button onClick={() => setShowAll(true)} className="w-full rounded-xl border border-slate-300 py-2 text-slate-700">Show all {results.length}</button>}
         </section>
       )}
     </main>
   );
 }
 
-function CardImage({ path, className }: { path: string; className?: string }) {
+function CardImage({ v, className }: { v: Voter; className?: string }) {
   const [src, setSrc] = useState<string | null>(null);
-  useEffect(() => { let on = true; cardSrc(path).then((s) => on && setSrc(s)); return () => { on = false; }; }, [path]);
+  useEffect(() => { let on = true; getSnippet(v).then((s) => on && setSrc(s)); return () => { on = false; }; }, [v]);
   return src ? <img src={src} alt="Voter card" className={className} /> : <div className={`${className ?? ''} aspect-[7/3] animate-pulse bg-slate-200`} />;
 }
 
@@ -159,7 +162,7 @@ function VoterCard({ v, big, onSpeak }: { v: Voter; big?: boolean; onSpeak: () =
   if (v.img) {
     return (
       <section className="space-y-3 rounded-2xl bg-white p-3 shadow">
-        <CardImage path={v.img} className="w-full rounded-lg border" />
+        <CardImage v={v} className="w-full rounded-lg border" />
         <dl className="grid grid-cols-3 gap-2 text-center">
           {([['పేజీ', v.page], ['వరుస', v.row], ['కాలమ్', v.col], ['క్రమ సంఖ్య', v.serial]] as const).map(([k, val], i) => (
             <div key={k} className={`rounded-xl bg-indigo-50 py-2 ${i === 3 ? 'col-span-3' : ''}`}>

@@ -1,6 +1,7 @@
 'use client';
 import { useMemo, useRef, useState } from 'react';
 import { indexRoll, type IndexProgress } from '@/lib/rollindex';
+import { storeRoll } from '@/lib/store';
 import { FIELD_LABELS, guessMapping, readFile, toVoters, type FieldKey, type Mapping, type Table } from '@/lib/import';
 import { getDb } from '@/lib/db';
 
@@ -21,19 +22,23 @@ function PdfImporter() {
   const [busy, setBusy] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [prog, setProg] = useState<IndexProgress | null>(null);
+  const [saved, setSaved] = useState<number | null>(null);
   const [error, setError] = useState('');
   const [done, setDone] = useState('');
   const cancel = useRef(false);
 
   async function start(f: File | undefined) {
     if (!f) return;
-    setFile(f); setError(''); setDone(''); setProg(null); setBusy(true); cancel.current = false;
+    setFile(f); setError(''); setDone(''); setProg(null); setSaved(null); setBusy(true); cancel.current = false;
     let lock: { release: () => Promise<void> } | null = null;
     try { lock = await (navigator as any).wakeLock?.request('screen'); } catch { /* optional */ }
     const db = await getDb();
     const listId = await db.createList(f.name.replace(/\.pdf$/i, ''));
     try {
       const voters = await indexRoll(f, listId, setProg, () => cancel.current);
+      // Keep a private copy so card pictures can be cut out when someone searches.
+      setSaved(0);
+      await storeRoll(listId, f, setSaved);
       await db.appendVoters(listId, voters);
       setDone(`${voters.length} ఓటర్లు చేర్చబడ్డారు · ${voters.length} voters added. Go to Search.`);
     } catch (e) {
@@ -59,9 +64,9 @@ function PdfImporter() {
       {busy && (
         <div className="space-y-2" aria-live="polite">
           <div className="h-3 overflow-hidden rounded-full bg-slate-200">
-            <div className="h-full bg-indigo-600 transition-all" style={{ width: `${prog ? (prog.page / prog.total) * 100 : 3}%` }} />
+            <div className="h-full bg-indigo-600 transition-all" style={{ width: `${saved !== null ? 50 + saved * 50 : prog ? (prog.page / prog.total) * 50 : 2}%` }} />
           </div>
-          <p className="text-sm">{prog ? `పేజీ ${prog.page} / ${prog.total} · ${prog.cards} voters` : 'Opening file…'}</p>
+          <p className="text-sm">{saved !== null ? `ఫైల్ సేవ్ చేస్తున్నాను · Saving file ${Math.round(saved * 100)}%` : prog ? `పేజీ ${prog.page} / ${prog.total} · ${prog.cards} voters` : 'Opening file…'}</p>
           <p className="text-xs text-slate-500">This happens once. Keep the screen on and do not close the app.</p>
           <button onClick={() => { cancel.current = true; }} className="text-sm text-red-600 underline">Cancel</button>
         </div>

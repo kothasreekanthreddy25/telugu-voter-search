@@ -3,6 +3,7 @@ import type { Filters, Voter, VoterDb, VoterList } from './types';
 import { normId, normName, normNum } from './text';
 import { nameDistance, skeleton } from './fuzzy';
 import { deleteAllCards, deleteCards } from './cards';
+import { deleteAllRolls, deleteRoll } from './store';
 
 const DB_NAME = 'voters';
 const BATCH = 500;
@@ -14,7 +15,7 @@ CREATE TABLE IF NOT EXISTS voters (
   id INTEGER PRIMARY KEY AUTOINCREMENT, list_id INTEGER NOT NULL,
   name TEXT NOT NULL, name_norm TEXT NOT NULL, relation TEXT, relation_norm TEXT,
   voter_id TEXT, house TEXT, part TEXT, serial TEXT, station TEXT,
-  name_key TEXT, rel_key TEXT, page TEXT, pdf_page INTEGER, card_col INTEGER, card_row INTEGER, img TEXT);
+  name_key TEXT, rel_key TEXT, page TEXT, pdf_page INTEGER, card_col INTEGER, card_row INTEGER, img TEXT, card_y REAL);
 CREATE INDEX IF NOT EXISTS idx_voter_id ON voters(voter_id);
 CREATE INDEX IF NOT EXISTS idx_part_serial ON voters(part, serial);
 CREATE INDEX IF NOT EXISTS idx_list ON voters(list_id);
@@ -22,11 +23,11 @@ CREATE INDEX IF NOT EXISTS idx_list ON voters(list_id);
 // Columns added after the first release; older installs get them through ALTER TABLE.
 const LATER_COLUMNS: [string, string][] = [
   ['name_key', 'TEXT'], ['rel_key', 'TEXT'], ['page', 'TEXT'], ['pdf_page', 'INTEGER'],
-  ['card_col', 'INTEGER'], ['card_row', 'INTEGER'], ['img', 'TEXT'],
+  ['card_col', 'INTEGER'], ['card_row', 'INTEGER'], ['img', 'TEXT'], ['card_y', 'REAL'],
 ];
 
 const INSERT =
-  'INSERT INTO voters (list_id,name,name_norm,relation,relation_norm,voter_id,house,part,serial,station,name_key,rel_key,page,pdf_page,card_col,card_row,img) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)';
+  'INSERT INTO voters (list_id,name,name_norm,relation,relation_norm,voter_id,house,part,serial,station,name_key,rel_key,page,pdf_page,card_col,card_row,img,card_y) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)';
 
 /** Exact-match filters only; name and father/husband name are matched approximately in JS. */
 export function buildWhere(f: Filters): { sql: string; params: string[] } {
@@ -48,11 +49,11 @@ const toVoter = (r: Row): Voter => ({
   serial: String(r.serial ?? ''), station: String(r.station ?? ''),
   page: r.page ? String(r.page) : undefined, pdfPage: r.pdf_page ? Number(r.pdf_page) : undefined,
   col: r.card_col ? Number(r.card_col) : undefined, row: r.card_row ? Number(r.card_row) : undefined,
-  img: r.img ? String(r.img) : undefined,
+  img: r.img ? String(r.img) : undefined, cardY: r.card_y != null ? Number(r.card_y) : undefined,
 });
 const insertParams = (listId: number, v: Voter) => [
   listId, v.name, normName(v.name), v.relation, normName(v.relation), normId(v.voterId), v.house, v.part, v.serial, v.station,
-  v.nameKey ?? skeleton(v.name), v.relKey ?? skeleton(v.relation), v.page ?? null, v.pdfPage ?? null, v.col ?? null, v.row ?? null, v.img ?? null,
+  v.nameKey ?? skeleton(v.name), v.relKey ?? skeleton(v.relation), v.page ?? null, v.pdfPage ?? null, v.col ?? null, v.row ?? null, v.img ?? null, v.cardY ?? null,
 ];
 
 /** Ranks candidates by how closely their name (and father/husband name) match what was said. */
@@ -125,11 +126,13 @@ class NativeDb implements VoterDb {
     await this.db.run('DELETE FROM lists WHERE id = ?', [id], false);
     await this.db.execute('VACUUM');
     await deleteCards(id);
+    await deleteRoll(id);
   }
 
   async deleteAll() {
     await this.db.execute('DELETE FROM voters; DELETE FROM lists; VACUUM;');
     await deleteAllCards();
+    await deleteAllRolls();
   }
 
   async search(f: Filters, limit = 50) {
@@ -186,8 +189,10 @@ class WebDb implements VoterDb {
     this.data.voters = this.data.voters.filter((v) => v.listId !== id);
     this.save();
     await deleteCards(id);
+    await deleteRoll(id);
   }
-  async deleteAll() { this.data.lists = []; this.data.voters = []; this.save(); await deleteAllCards(); }
+  async deleteAll() { this.data.lists = []; this.data.voters = []; this.save(); await deleteAllCards();
+    await deleteAllRolls(); }
 
   async search(f: Filters, limit = 50) {
     if (!hasAnyFilter(f)) return [];

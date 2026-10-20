@@ -1,18 +1,20 @@
 import type { Voter } from './types';
-import { saveCard } from './cards';
+import { cardPath } from './cards';
 import { openPdf } from './pdf';
 import { skeleton } from './fuzzy';
 
 /**
  * Reads a card-style panchayat electoral roll (voter cards in 3 columns, serial number in each card's header).
- * The roll's Telugu text layer is corrupted, so names are only used as an approximate search key; the
- * reliable output is WHERE a card is (page, row, column, serial) plus a cropped picture of the card itself.
+ * Only the text layer is read here, which is fast. The roll's Telugu text is corrupted, so names serve only as an
+ * approximate search key; the reliable output is WHERE a card is (page, row, column, serial). The picture of a
+ * card is cut out of the stored PDF later, when someone actually searches for it (see snippet.ts).
  */
-const COL_X0 = [39, 216, 393]; // left text edge of each card column, in PDF points
-const SCALE = 2.2;
+export const COL_X0 = [39, 216, 393]; // left text edge of each card column, in PDF points
+export const CARD_W = 175;
+export const CARD_H = 75;
 
 type Item = { s: string; x: number; y: number; w: number };
-interface Card { col: number; row: number; x0: number; hy: number; serial: string; part: string; id: string; age: string; house: string }
+interface Card { col: number; row: number; x0: number; hy: number; serial: string; part: string; id: string; house: string }
 
 function parseCards(items: Item[]): Card[] {
   const cards: Card[] = [];
@@ -29,11 +31,9 @@ function parseCards(items: Item[]): Card[] {
       if (!id) continue; // page furniture also contains numbers; real cards always carry an EPIC number
       const asm = line(0, x0 + 85).map((i) => i.s).join('').match(/(\d+)-(\d+)-(\d+)/);
       cards.push({
-        col, row: 0, x0, hy: h.y, serial: h.s, id, part: asm?.[2] ?? '',
-        age: line(37).map((i) => i.s).join(' ').match(/:\s*(\d+)/)?.[1] ?? '',
+        col, row: cards.filter((c) => c.col === col).length + 1, x0, hy: h.y, serial: h.s, id, part: asm?.[2] ?? '',
         house: line(49, x0 + 40).map((i) => i.s).join('').replace(/^\s*:\s*/, '').trim(),
       });
-      cards[cards.length - 1].row = cards.filter((c) => c.col === col).length;
     }
   }
   return cards;
@@ -53,40 +53,25 @@ export async function indexRoll(
 ): Promise<Voter[]> {
   const pdf = await openPdf(file);
   const voters: Voter[] = [];
-  const canvas = document.createElement('canvas');
 
   for (let p = 1; p <= pdf.numPages; p++) {
     if (cancelled()) throw new Error('Cancelled');
     const page = await pdf.getPage(p);
-    const vp1 = page.getViewport({ scale: 1 });
     const tc = await page.getTextContent();
     const items: Item[] = (tc.items as any[])
       .filter((i) => 'str' in i && i.str.trim() !== '')
       .map((i) => ({ s: i.str as string, x: i.transform[4], y: i.transform[5], w: i.width }));
     const cards = parseCards(items);
+    // Printed page number ("1/42") is what people see in their paper copy; it differs from the PDF page.
+    const printed = items.find((i) => i.y < 60 && /^\d+\/\d+$/.test(i.s.trim()))?.s.trim().split('/')[0] ?? String(p);
 
-    if (cards.length) {
-      const printed = items.find((i) => i.y < 60 && /^\d+\/\d+$/.test(i.s.trim()))?.s.trim().split('/')[0] ?? String(p);
-      const vp = page.getViewport({ scale: SCALE });
-      canvas.width = Math.round(vp.width);
-      canvas.height = Math.round(vp.height);
-      await page.render({ canvasContext: canvas.getContext('2d')!, viewport: vp, canvas } as any).promise;
-
-      for (const c of cards) {
-        const sx = (c.x0 - 3) * SCALE, sy = (vp1.height - (c.hy + 9)) * SCALE;
-        const w = 175 * SCALE, h = 75 * SCALE;
-        const crop = document.createElement('canvas');
-        crop.width = Math.round(w); crop.height = Math.round(h);
-        crop.getContext('2d')!.drawImage(canvas, sx, sy, w, h, 0, 0, crop.width, crop.height);
-        const jpeg = await new Promise<Blob>((res, rej) => crop.toBlob((b) => (b ? res(b) : rej(new Error('Image failed'))), 'image/jpeg', 0.8));
-        const img = await saveCard(listId, `p${p}-c${c.col + 1}-r${c.row}`, jpeg);
-        const name = lineText(items, c, 12), relation = lineText(items, c, 25);
-        voters.push({
-          name, relation, voterId: c.id, house: c.house, part: c.part, serial: c.serial, station: '',
-          page: printed, pdfPage: p, col: c.col + 1, row: c.row, img,
-          nameKey: skeleton(name), relKey: skeleton(relation),
-        });
-      }
+    for (const c of cards) {
+      const name = lineText(items, c, 12), relation = lineText(items, c, 25);
+      voters.push({
+        name, relation, voterId: c.id, house: c.house, part: c.part, serial: c.serial, station: '',
+        page: printed, pdfPage: p, col: c.col + 1, row: c.row, cardY: c.hy, img: cardPath(listId, p, c.col + 1, c.row),
+        nameKey: skeleton(name), relKey: skeleton(relation),
+      });
     }
     page.cleanup();
     onProgress({ page: p, total: pdf.numPages, cards: voters.length });

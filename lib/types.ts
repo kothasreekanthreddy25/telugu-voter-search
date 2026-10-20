@@ -13,7 +13,8 @@ export interface Voter {
   pdfPage?: number;   // physical page in the PDF
   col?: number;       // 1-3, left to right
   row?: number;       // 1-10, top to bottom
-  img?: string;       // stored snippet of the card
+  img?: string;       // where the picture of the card is (or will be) stored
+  cardY?: number;     // vertical position of the card on its PDF page, to cut the picture out
   nameKey?: string;   // skeleton() of the name as found in the file, for approximate matching
   relKey?: string;
 }

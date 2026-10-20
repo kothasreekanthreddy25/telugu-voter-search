@@ -13,23 +13,29 @@ export function loadPdfjs() {
 }
 
 /**
- * Opens a PDF straight from the picked file, reading only the byte ranges pdf.js asks for.
- * Electoral rolls with photos are 100+ MB, so loading the whole file into memory is avoided.
+ * Opens a PDF by reading only the byte ranges pdf.js asks for. Electoral rolls with photos are 100+ MB,
+ * so loading the whole file into memory is avoided. `read` returns the bytes [begin, end).
  */
-export async function openPdf(file: File): Promise<PDFDocumentProxy> {
+export async function openRange(size: number, read: (begin: number, end: number) => Promise<Uint8Array>): Promise<PDFDocumentProxy> {
   const pdfjs = await loadPdfjs();
-  class BlobRange extends pdfjs.PDFDataRangeTransport {
+  class Ranged extends pdfjs.PDFDataRangeTransport {
     requestDataRange(begin: number, end: number) {
-      file.slice(begin, end).arrayBuffer().then((b) => this.onDataRange(begin, new Uint8Array(b)));
+      read(begin, end).then((b) => this.onDataRange(begin, b));
     }
   }
+  const initial = await read(0, Math.min(size, 65536));
+  return pdfjs.getDocument({
+    range: new Ranged(size, initial), length: size,
+    disableAutoFetch: true, disableStream: true, rangeChunkSize: 262144,
+  } as any).promise;
+}
+
+/** The file the user just picked. */
+export async function openPdf(file: File): Promise<PDFDocumentProxy> {
   try {
-    const initial = new Uint8Array(await file.slice(0, 65536).arrayBuffer());
-    return await pdfjs.getDocument({
-      range: new BlobRange(file.size, initial), length: file.size,
-      disableAutoFetch: true, disableStream: true, rangeChunkSize: 262144,
-    } as any).promise;
+    return await openRange(file.size, async (b, e) => new Uint8Array(await file.slice(b, e).arrayBuffer()));
   } catch {
+    const pdfjs = await loadPdfjs();
     return pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
   }
 }

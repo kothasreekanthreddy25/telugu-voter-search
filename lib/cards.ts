@@ -13,14 +13,14 @@ const blobToBase64 = (b: Blob) =>
     r.readAsDataURL(b);
   });
 
-export async function saveCard(listId: number, name: string, jpeg: Blob): Promise<string> {
-  const path = `cards/${listId}/${name}.jpg`;
+export const cardPath = (listId: number, pdfPage: number, col: number, row: number) => `cards/${listId}/p${pdfPage}-c${col}-r${row}.jpg`;
+
+export async function saveCard(path: string, jpeg: Blob): Promise<void> {
   if (native()) {
     await Filesystem.writeFile({ path, data: await blobToBase64(jpeg), directory: Directory.Data, recursive: true });
   } else {
     webStore.set(path, URL.createObjectURL(jpeg));
   }
-  return path;
 }
 
 const srcCache = new Map<string, string>();
@@ -29,6 +29,7 @@ export async function cardSrc(path: string): Promise<string | null> {
   const hit = srcCache.get(path);
   if (hit) return hit;
   try {
+    await Filesystem.stat({ path, directory: Directory.Data }); // throws when the picture has not been cut out yet
     const { uri } = await Filesystem.getUri({ path, directory: Directory.Data });
     const src = Capacitor.convertFileSrc(uri);
     srcCache.set(path, src);
