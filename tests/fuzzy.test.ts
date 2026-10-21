@@ -24,3 +24,10 @@ test('short words need an exact hit', () => {
   assert.equal(nameDistance(skeleton('రాము'), 'సీత'), Infinity);
   assert.equal(nameDistance(skeleton('రాము'), 'రాము'), 0);
 });
+
+test('English spellings meet Telugu names', () => {
+  const stored = skeleton('బాలరాజు ఆలూరి');
+  assert.equal(nameDistance(stored, 'balaraju'), 0);
+  assert.ok(nameDistance(stored, 'balaraju aluri') <= 1);
+  assert.equal(nameDistance(skeleton('వెంకటేశ్వర్లు'), 'venkateswarlu') <= 2, true);
+});

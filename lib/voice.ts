@@ -95,6 +95,7 @@ export async function checkCapabilities(): Promise<Capability> {
 export const phrases = {
   ready: 'ఏమి వెతకాలో చెప్పండి.',
   notUnderstood: 'అర్థం కాలేదు. దయచేసి మళ్ళీ చెప్పండి.',
+  tooShort: 'దయచేసి పూర్తి పేరు చెప్పండి.',
   notFound: 'ఎవరూ దొరకలేదు. దయచేసి మళ్ళీ చెప్పండి.',
   noData: 'డేటాబేస్‌లో ఓటర్ల జాబితా లేదు. దయచేసి అడ్మిన్ జాబితాను దిగుమతి చేయాలి.',
   tooMany: (n: number) =>

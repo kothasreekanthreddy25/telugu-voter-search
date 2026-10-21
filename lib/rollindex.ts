@@ -13,10 +13,10 @@ export const COL_X0 = [39, 216, 393]; // left text edge of each card column, in 
 export const CARD_W = 175;
 export const CARD_H = 75;
 
-type Item = { s: string; x: number; y: number; w: number };
+export type Item = { s: string; x: number; y: number; w: number };
 interface Card { col: number; row: number; x0: number; hy: number; serial: string; part: string; id: string; house: string }
 
-function parseCards(items: Item[]): Card[] {
+export function parseCards(items: Item[]): Card[] {
   const cards: Card[] = [];
   for (let col = 0; col < 3; col++) {
     const x0 = COL_X0[col];
@@ -39,7 +39,7 @@ function parseCards(items: Item[]): Card[] {
   return cards;
 }
 
-const lineText = (items: Item[], c: Card, dy: number) =>
+export const lineText = (items: Item[], c: Card, dy: number) =>
   items.filter((i) => i.x >= c.x0 + 44.5 && i.x < c.x0 + 135 && Math.abs(i.y - (c.hy - dy)) <= 3)
     .sort((a, b) => a.x - b.x).map((i) => i.s).join('');
 

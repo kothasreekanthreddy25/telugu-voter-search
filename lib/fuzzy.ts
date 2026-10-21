@@ -4,7 +4,14 @@ import { clean } from './text';
 const FOLD: Record<string, string> = {
   ఆ: 'అ', ఈ: 'ఇ', ఊ: 'ఉ', ఏ: 'ఎ', ఓ: 'ఒ', ౠ: 'ఋ',
   శ: 'స', ష: 'స', ణ: 'న', ళ: 'ల', ఱ: 'ర', ఙ: 'న', ఞ: 'న',
-  ఖ: 'క', ఘ: 'గ', ఛ: 'చ', ఝ: 'జ', ఠ: 'ట', ఢ: 'డ', థ: 'త', ధ: 'ద', ఫ: 'ప', భ: 'బ',
+  ఖ: 'క', ఘ: 'గ', ఛ: 'చ', ఝ: 'జ', ఠ: 'త', ట: 'త', థ: 'త', డ: 'ద', ఢ: 'ద', ధ: 'ద', ఫ: 'ప', భ: 'బ',
+};
+
+// English spellings are mapped onto the same consonant skeleton, so "balaraju" meets బాలరాజు.
+const LATIN_DIGRAPH: Record<string, string> = { sh: 'స', ch: 'చ', th: 'త', dh: 'ద', kh: 'క', gh: 'గ', bh: 'బ', ph: 'ప', jh: 'జ', ng: 'న' };
+const LATIN: Record<string, string> = {
+  k: 'క', c: 'క', q: 'క', g: 'గ', j: 'జ', z: 'జ', t: 'త', d: 'ద', n: 'న', p: 'ప', f: 'ప', b: 'బ', m: 'మ',
+  y: 'య', r: 'ర', l: 'ల', v: 'వ', w: 'వ', s: 'స', h: 'హ', x: 'క',
 };
 
 /**
@@ -13,12 +20,19 @@ const FOLD: Record<string, string> = {
  */
 export function skeleton(s: string): string {
   let out = '';
-  for (const ch of clean(s).toLowerCase()) {
+  const text = clean(s).toLowerCase();
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (/[a-z]/.test(ch)) {
+      const two = LATIN_DIGRAPH[text.slice(i, i + 2)];
+      if (two) { out += two; i++; } else out += LATIN[ch] ?? ''; // vowels carry no weight
+      continue;
+    }
     const c = ch.codePointAt(0)!;
     if (ch === '\u0000' || ch === ' ') continue;
     if ((c >= 0x0c00 && c <= 0x0c04) || (c >= 0x0c3e && c <= 0x0c4d) || c === 0x0c55 || c === 0x0c56 || c === 0x0c62 || c === 0x0c63) continue;
     if (c >= 0x0c00 && c <= 0x0c7f) out += FOLD[ch] ?? ch;
-    else if (/[a-z0-9]/.test(ch)) out += ch;
+    else if (/[0-9]/.test(ch)) out += ch;
   }
   return out;
 }
