@@ -1,7 +1,7 @@
 import { Capacitor } from '@capacitor/core';
 import type { Filters, Voter, VoterDb, VoterList } from './types';
 import { normId, normName, normNum } from './text';
-import { nameDistance, skeleton, SKELETON_VERSION } from './fuzzy';
+import { nameMatch, skeleton, SKELETON_VERSION } from './fuzzy';
 import { deleteAllCards, deleteCards } from './cards';
 import { deleteAllRolls, deleteRoll } from './store';
 
@@ -56,17 +56,20 @@ const insertParams = (listId: number, v: Voter) => [
   v.nameKey ?? skeleton(v.name), v.relKey ?? skeleton(v.relation), v.page ?? null, v.pdfPage ?? null, v.col ?? null, v.row ?? null, v.img ?? null, v.cardY ?? null,
 ];
 
-/** Ranks candidates by how closely their name (and father/husband name) match what was said. */
+/**
+ * Ranks candidates by how closely their name (and father/husband name) match what was said. Voters matching every
+ * spoken word come first; partial matches are only used when nobody matches every word.
+ */
 function rank(cands: { id: number; nameKey: string; relKey: string; order: number }[], f: Filters, limit: number): number[] {
-  const scored: { id: number; d: number; order: number }[] = [];
+  const scored: { id: number; d: number; missing: number; order: number }[] = [];
   for (const c of cands) {
-    let d = 0;
-    if (f.name) { const x = nameDistance(c.nameKey, f.name); if (x === Infinity) continue; d += x; }
-    if (f.relation) { const x = nameDistance(c.relKey, f.relation); if (x === Infinity) continue; d += x; }
-    scored.push({ id: c.id, d, order: c.order });
+    let d = 0, missing = 0;
+    if (f.name) { const x = nameMatch(c.nameKey, f.name); if (!x) continue; d += x.cost; missing += x.missing; }
+    if (f.relation) { const x = nameMatch(c.relKey, f.relation); if (!x) continue; d += x.cost; missing += x.missing; }
+    scored.push({ id: c.id, d, missing, order: c.order });
   }
-  scored.sort((a, b) => a.d - b.d || a.order - b.order);
-  return scored.slice(0, limit).map((s) => s.id);
+  const best = Math.min(...scored.map((s) => s.missing));
+  return scored.filter((s) => s.missing === best).sort((a, b) => a.d - b.d || a.order - b.order).slice(0, limit).map((s) => s.id);
 }
 
 /** Encrypted (SQLCipher) SQLite on Android. The key is generated once and held in the Android Keystore by the plugin. */

@@ -2,7 +2,7 @@
 import { readFileSync } from 'node:fs';
 import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { lineText, parseCards, type Item } from '../lib/rollindex';
-import { nameDistance, skeleton } from '../lib/fuzzy';
+import { nameMatch, skeleton } from '../lib/fuzzy';
 
 const pdf = await pdfjs.getDocument({ data: new Uint8Array(readFileSync(process.argv[2])), useSystemFonts: true }).promise;
 const rows: { page: number; col: number; row: number; serial: string; id: string; nameKey: string; relKey: string; raw: string }[] = [];
@@ -20,8 +20,11 @@ for (const r of rows.filter((x) => x.serial === (process.env.SERIAL ?? '')))
   console.log('SERIAL', r.serial, 'page', r.page, 'col', r.col, 'raw', JSON.stringify(r.raw), 'key', r.nameKey);
 const queries = (process.argv[3] ?? 'వర ప్రసాద్ ఆలూరి|బాలరాజు|కోటేశ్వరమ్మ|మాలకొండయ్య|ప్రేమల|balaraju|narayana|s|zzzz').split('|');
 for (const q of queries) {
-  const hits = rows.map((r) => ({ r, d: nameDistance(r.nameKey, q) })).filter((h) => h.d !== Infinity).sort((a, b) => a.d - b.d);
-  const top = hits.slice(0, 40).map((h) => `#${h.r.serial} p${h.r.page}/c${h.r.col} d=${h.d}`).join('  ');
+  // same rule as the app: voters matching every word first, partial matches only when nobody does
+  const all = rows.map((r) => ({ r, m: nameMatch(r.nameKey, q) })).filter((h) => h.m);
+  const best = Math.min(...all.map((h) => h.m!.missing));
+  const hits = all.filter((h) => h.m!.missing === best).map((h) => ({ r: h.r, d: h.m!.cost })).sort((a, b) => a.d - b.d);
+  const top = hits.slice(0, 40).map((h) => `#${h.r.serial} p${h.r.page}/c${h.r.col} d=${h.d} ${h.r.raw.slice(0, 26)}`).join('\n   ');
   console.log(`"${q}" -> ${hits.length} match(es)  ${top}`);
 }
 process.exit(0);

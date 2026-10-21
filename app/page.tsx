@@ -4,7 +4,7 @@ import { getSnippet } from '@/lib/snippet';
 import { getDb } from '@/lib/db';
 import { parseCommand } from '@/lib/command';
 import { parseChoice } from '@/lib/text';
-import { skeleton } from '@/lib/fuzzy';
+import { skeleton, strength } from '@/lib/fuzzy';
 import { describeVoter, listen, phrases, speak, stopListening, stopSpeaking } from '@/lib/voice';
 import type { Filters, Voter } from '@/lib/types';
 
@@ -43,7 +43,7 @@ export default function Home() {
 
       const cmd = parseCommand(text);
       if (!cmd) return await say(phrases.notUnderstood);
-      if ((cmd.field === 'name' || cmd.field === 'relation') && skeleton(cmd.value).length < 2) return await say(phrases.tooShort);
+      if ((cmd.field === 'name' || cmd.field === 'relation') && strength(skeleton(cmd.value)) < 2) return await say(phrases.tooShort);
 
       // A different field than before narrows the current search; the same field starts over.
       const refining = results.length > 1 && !(cmd.field in filters);

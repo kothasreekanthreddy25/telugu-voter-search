@@ -1,75 +1,103 @@
 import { clean } from './text';
 
 /** Bump when skeleton() changes: stored search keys are rebuilt from the saved names on next start. */
-export const SKELETON_VERSION = 2;
+export const SKELETON_VERSION = 3;
 
 // Letters that speech recognition and OCR commonly confuse are folded together.
 const FOLD: Record<string, string> = {
-  శ: 'స', ష: 'స', ణ: 'న', ళ: 'ల', ఱ: 'ర', ఙ: 'న', ఞ: 'న',
+  శ: 'స', ష: 'స', ణ: 'న', ళ: 'ల', ఱ: 'ర', ఙ: 'న', ఞ: 'న', 'ం': 'న',
   ఖ: 'క', ఘ: 'గ', ఛ: 'చ', ఝ: 'జ', ఠ: 'త', ట: 'త', థ: 'త', డ: 'ద', ఢ: 'ద', ధ: 'ద', ఫ: 'ప', భ: 'బ',
 };
 
-// English spellings are mapped onto the same consonant skeleton, so "balaraju" meets బాలరాజు.
+// Vowels are kept as the lowercase markers a e i o u (long/short folded). They count for little, because the PDF's
+// Telugu and English spellings disagree about them, but enough to tell "మురళి" from "కుమారి ఆలూరి".
+const VOWEL_SIGNS: Record<string, string> = {
+  'ా': 'a', 'ి': 'i', 'ీ': 'i', 'ు': 'u', 'ూ': 'u', 'ృ': 'u', 'ె': 'e', 'ే': 'e', 'ై': 'e', 'ొ': 'o', 'ో': 'o', 'ౌ': 'o',
+  'అ': 'a', 'ఆ': 'a', 'ఇ': 'i', 'ఈ': 'i', 'ఉ': 'u', 'ఊ': 'u', 'ఋ': 'u', 'ఎ': 'e', 'ఏ': 'e', 'ఐ': 'e', 'ఒ': 'o', 'ఓ': 'o', 'ఔ': 'o',
+};
+
+// English spellings are mapped onto the same skeleton, so "balaraju" meets బాలరాజు.
 const LATIN_DIGRAPH: Record<string, string> = { sh: 'స', ch: 'చ', th: 'త', dh: 'ద', kh: 'క', gh: 'గ', bh: 'బ', ph: 'ప', jh: 'జ', ng: 'న' };
 const LATIN: Record<string, string> = {
   k: 'క', c: 'క', q: 'క', g: 'గ', j: 'జ', z: 'జ', t: 'త', d: 'ద', n: 'న', p: 'ప', f: 'ప', b: 'బ', m: 'మ',
   y: 'య', r: 'ర', l: 'ల', v: 'వ', w: 'వ', s: 'స', h: 'హ', x: 'క',
+  a: 'a', e: 'e', i: 'i', o: 'o', u: 'u',
 };
 
+const isVowel = (c: string) => c.length === 1 && 'aeiou'.includes(c);
+
 /**
- * Shape of a name that survives corrupted PDF text and imperfect speech recognition:
- * vowel signs, virama, anusvara and unreadable characters are dropped, look-alike letters are folded.
+ * Shape of a name that survives corrupted PDF text and imperfect speech recognition: consonants in a folded
+ * alphabet, vowels as a e i o u, and nothing else (virama, unreadable characters and spaces are dropped).
  */
 export function skeleton(s: string): string {
   let out = '';
+  const push = (c: string) => { if (!(isVowel(c) && out.endsWith(c))) out += c; };
   const text = clean(s).toLowerCase();
   for (let i = 0; i < text.length; i++) {
     const ch = text[i];
     if (/[a-z]/.test(ch)) {
       const two = LATIN_DIGRAPH[text.slice(i, i + 2)];
-      if (two) { out += two; i++; } else out += LATIN[ch] ?? ''; // vowels carry no weight
+      if (two) { push(two); i++; } else push(LATIN[ch]);
       continue;
     }
+    if (/[0-9]/.test(ch)) { out += ch; continue; }
     const c = ch.codePointAt(0)!;
-    if (ch === '\u0000' || ch === ' ') continue;
-    if ((c >= 0x0c05 && c <= 0x0c14) || c === 0x0c60 || c === 0x0c61) continue; // independent vowels: English vowels carry no weight either
-    if ((c >= 0x0c00 && c <= 0x0c04) || (c >= 0x0c3e && c <= 0x0c4d) || c === 0x0c55 || c === 0x0c56 || c === 0x0c62 || c === 0x0c63) continue;
-    if (c >= 0x0c00 && c <= 0x0c7f) out += FOLD[ch] ?? ch;
-    else if (/[0-9]/.test(ch)) out += ch;
+    if (VOWEL_SIGNS[ch]) { push(VOWEL_SIGNS[ch]); continue; }
+    // Telugu consonants and the anusvara; virama, visarga, candrabindu and unreadable characters are dropped.
+    if (c >= 0x0c02 && c <= 0x0c7f && c !== 0x0c03 && !(c >= 0x0c3e && c <= 0x0c56) && c !== 0x0c62 && c !== 0x0c63) push(FOLD[ch] ?? ch);
   }
   return out;
 }
 
-/** Smallest edit distance between q and any substring of t (Sellers). Infinity if above the allowance. */
+/** How many consonants a skeleton has; fewer than two is too little to search on. */
+export const strength = (sk: string) => [...sk].filter((c) => !isVowel(c) && !/[0-9]/.test(c)).length;
+
+const VOWEL_COST = 0.35;
+const cost = (c: string) => (isVowel(c) ? VOWEL_COST : 1);
+const sub = (a: string, b: string) => (a === b ? 0 : isVowel(a) && isVowel(b) ? VOWEL_COST : 1);
+
+/**
+ * Cheapest way to find q inside t (Sellers): consonant mistakes cost 1, vowel mistakes 0.35.
+ * Infinity when the cost is above what a name of this length may have wrong.
+ */
 export function approxContains(t: string, q: string): number {
   if (!q) return Infinity;
-  const allowed = q.length <= 2 ? 0 : Math.floor(q.length * 0.3);
-  let prev = Array.from({ length: q.length + 1 }, (_, i) => i);
+  const consonants = strength(q), vowels = q.length - consonants;
+  const allowed = Math.floor(consonants * 0.3) + VOWEL_COST * Math.max(1, Math.floor(vowels * 0.5)) + 1e-9;
+  let prev: number[] = [0];
+  for (let i = 1; i <= q.length; i++) prev[i] = prev[i - 1] + cost(q[i - 1]);
   let best = prev[q.length];
   for (let j = 1; j <= t.length; j++) {
     const cur = [0];
     for (let i = 1; i <= q.length; i++) {
-      cur[i] = Math.min(prev[i] + 1, cur[i - 1] + 1, prev[i - 1] + (q[i - 1] === t[j - 1] ? 0 : 1));
+      cur[i] = Math.min(prev[i] + cost(t[j - 1]), cur[i - 1] + cost(q[i - 1]), prev[i - 1] + sub(q[i - 1], t[j - 1]));
     }
     if (cur[q.length] < best) best = cur[q.length];
     prev = cur;
   }
-  return best <= allowed ? best : Infinity;
+  return best <= allowed ? Math.round(best * 100) / 100 : Infinity;
 }
 
 /**
- * How well a stored name matches what was said (0 = perfect, Infinity = no match). At least half of the spoken
- * words must be found: the PDF's Telugu text is partly corrupted, so one damaged word must not hide the voter.
- * Words that are not found cost extra, so cards that match every word rank first.
+ * How well a stored name matches what was said. At least half of the spoken words must be found: the PDF's Telugu
+ * text is partly corrupted, so one damaged word must not hide the voter. The count of missing words lets callers
+ * prefer cards that match every word.
  */
-export function nameDistance(storedSkeleton: string, query: string): number {
+export function nameMatch(storedSkeleton: string, query: string): { cost: number; missing: number } | null {
   const words = clean(query).split(' ').map(skeleton).filter(Boolean);
-  if (!words.length) return Infinity;
-  let total = 0, found = 0;
+  if (!words.length) return null;
+  let cost = 0, missing = 0;
   for (const w of words) {
     const d = approxContains(storedSkeleton, w);
-    if (d === Infinity) total += 4;
-    else { total += d; found++; }
+    if (d === Infinity) missing++;
+    else cost += d;
   }
-  return found >= Math.ceil(words.length / 2) ? total : Infinity;
+  return words.length - missing >= Math.ceil(words.length / 2) ? { cost, missing } : null;
+}
+
+/** Single number for tests and sorting: 0 = perfect, Infinity = no match; each missing word costs 4. */
+export function nameDistance(storedSkeleton: string, query: string): number {
+  const m = nameMatch(storedSkeleton, query);
+  return m ? m.cost + 4 * m.missing : Infinity;
 }
