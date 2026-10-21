@@ -1,19 +1,26 @@
 // Usage: npx tsx tools/check-roll.mts <roll.pdf> — runs the app's own parsing and name search on a real roll.
 import { readFileSync } from 'node:fs';
 import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
-import { lineText, parseCards, type Item } from '../lib/rollindex';
+import { parseCards, type Item } from '../lib/rollindex';
 import { nameMatch, skeleton } from '../lib/fuzzy';
 
-const pdf = await pdfjs.getDocument({ data: new Uint8Array(readFileSync(process.argv[2])), useSystemFonts: true }).promise;
-const rows: { page: number; col: number; row: number; serial: string; id: string; nameKey: string; relKey: string; raw: string }[] = [];
+const rows: { file: string; page: number; col: number; row: number; serial: string; id: string; nameKey: string; relKey: string; raw: string }[] = [];
+for (const file of process.argv[2].split('|')) {
+const pdf = await pdfjs.getDocument({ data: new Uint8Array(readFileSync(file)), useSystemFonts: true }).promise;
 for (let p = 1; p <= pdf.numPages; p++) {
   const tc = await (await pdf.getPage(p)).getTextContent();
   const items: Item[] = (tc.items as any[]).filter((i) => 'str' in i && i.str.trim()).map((i) => ({ s: i.str, x: i.transform[4], y: i.transform[5], w: i.width }));
   for (const c of parseCards(items)) {
-    const name = lineText(items, c, 12), rel = lineText(items, c, 25);
-    rows.push({ page: p, col: c.col + 1, row: c.row, serial: c.serial, id: c.id, nameKey: skeleton(name), relKey: skeleton(rel), raw: name });
+    const name = c.name, rel = c.relation;
+    rows.push({ file: file.split(/[\/]/).pop()!, page: p, col: c.col + 1, row: c.row, serial: c.serial, id: c.id, nameKey: skeleton(name), relKey: skeleton(rel), raw: name });
   }
 }
+}
+const sn = rows.map((r) => Number(r.serial)).filter(Number.isFinite);
+console.log('serials', Math.min(...sn), '-', Math.max(...sn), '| distinct ids:', new Set(rows.map((r) => r.id)).size);
+{ const have = new Set(sn); const lo = Math.min(...sn), hi = Math.max(...sn); const gaps: number[] = []; for (let i = lo; i <= hi; i++) if (!have.has(i)) gaps.push(i); console.log('missing serials in range:', gaps.length, gaps.slice(0, 30).join(',')); }
+const pagesEmpty = new Map<number, number>(); for (const r of rows.filter((x) => !x.nameKey)) pagesEmpty.set(r.page, (pagesEmpty.get(r.page) ?? 0) + 1);
+console.log('pages with empty names:', [...pagesEmpty].map(([p, n]) => p + ':' + n).join(' '));
 console.log('cards indexed:', rows.length, '| empty name keys:', rows.filter((r) => !r.nameKey).length);
 
 for (const r of rows.filter((x) => x.serial === (process.env.SERIAL ?? '')))
