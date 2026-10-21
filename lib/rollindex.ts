@@ -11,7 +11,7 @@ import { skeleton } from './fuzzy';
  */
 export const COL_X0 = [39, 216, 393]; // left text edge of each card column, in PDF points
 export const CARD_W = 175;
-export const CARD_H = 75;
+export const CARD_H = 74; // stops short of the page footer that sits just under the last row
 
 export type Item = { s: string; x: number; y: number; w: number };
 interface Card { col: number; row: number; x0: number; hy: number; serial: string; part: string; id: string; house: string }

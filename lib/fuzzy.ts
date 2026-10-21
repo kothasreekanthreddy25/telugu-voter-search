@@ -1,8 +1,10 @@
 import { clean } from './text';
 
+/** Bump when skeleton() changes: stored search keys are rebuilt from the saved names on next start. */
+export const SKELETON_VERSION = 2;
+
 // Letters that speech recognition and OCR commonly confuse are folded together.
 const FOLD: Record<string, string> = {
-  ఆ: 'అ', ఈ: 'ఇ', ఊ: 'ఉ', ఏ: 'ఎ', ఓ: 'ఒ', ౠ: 'ఋ',
   శ: 'స', ష: 'స', ణ: 'న', ళ: 'ల', ఱ: 'ర', ఙ: 'న', ఞ: 'న',
   ఖ: 'క', ఘ: 'గ', ఛ: 'చ', ఝ: 'జ', ఠ: 'త', ట: 'త', థ: 'త', డ: 'ద', ఢ: 'ద', ధ: 'ద', ఫ: 'ప', భ: 'బ',
 };
@@ -30,6 +32,7 @@ export function skeleton(s: string): string {
     }
     const c = ch.codePointAt(0)!;
     if (ch === '\u0000' || ch === ' ') continue;
+    if ((c >= 0x0c05 && c <= 0x0c14) || c === 0x0c60 || c === 0x0c61) continue; // independent vowels: English vowels carry no weight either
     if ((c >= 0x0c00 && c <= 0x0c04) || (c >= 0x0c3e && c <= 0x0c4d) || c === 0x0c55 || c === 0x0c56 || c === 0x0c62 || c === 0x0c63) continue;
     if (c >= 0x0c00 && c <= 0x0c7f) out += FOLD[ch] ?? ch;
     else if (/[0-9]/.test(ch)) out += ch;
@@ -54,15 +57,19 @@ export function approxContains(t: string, q: string): number {
   return best <= allowed ? best : Infinity;
 }
 
-/** Every spoken word must be found somewhere in the stored name; the score is the total edit distance. */
+/**
+ * How well a stored name matches what was said (0 = perfect, Infinity = no match). At least half of the spoken
+ * words must be found: the PDF's Telugu text is partly corrupted, so one damaged word must not hide the voter.
+ * Words that are not found cost extra, so cards that match every word rank first.
+ */
 export function nameDistance(storedSkeleton: string, query: string): number {
   const words = clean(query).split(' ').map(skeleton).filter(Boolean);
   if (!words.length) return Infinity;
-  let total = 0;
+  let total = 0, found = 0;
   for (const w of words) {
     const d = approxContains(storedSkeleton, w);
-    if (d === Infinity) return Infinity;
-    total += d;
+    if (d === Infinity) total += 4;
+    else { total += d; found++; }
   }
-  return total;
+  return found >= Math.ceil(words.length / 2) ? total : Infinity;
 }

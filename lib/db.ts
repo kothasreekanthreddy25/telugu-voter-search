@@ -1,7 +1,7 @@
 import { Capacitor } from '@capacitor/core';
 import type { Filters, Voter, VoterDb, VoterList } from './types';
 import { normId, normName, normNum } from './text';
-import { nameDistance, skeleton } from './fuzzy';
+import { nameDistance, skeleton, SKELETON_VERSION } from './fuzzy';
 import { deleteAllCards, deleteCards } from './cards';
 import { deleteAllRolls, deleteRoll } from './store';
 
@@ -89,6 +89,19 @@ class NativeDb implements VoterDb {
     await this.db.execute(SCHEMA);
     const have = new Set(((await this.db.query('PRAGMA table_info(voters)')).values ?? []).map((c) => c.name));
     for (const [col, type] of LATER_COLUMNS) if (!have.has(col)) await this.db.execute(`ALTER TABLE voters ADD COLUMN ${col} ${type}`);
+    await this.rebuildKeys();
+  }
+
+  /** Search keys depend on skeleton(); when its rules change, rebuild them from the saved names. */
+  private async rebuildKeys() {
+    const version = ((await this.db.query('PRAGMA user_version')).values?.[0]?.user_version as number) ?? 0;
+    if (version >= SKELETON_VERSION) return;
+    const rows = (await this.db.query('SELECT id, name, relation FROM voters')).values ?? [];
+    for (let i = 0; i < rows.length; i += BATCH) {
+      const set = rows.slice(i, i + BATCH).map((r) => ({ statement: 'UPDATE voters SET name_key = ?, rel_key = ? WHERE id = ?', values: [skeleton(r.name ?? ''), skeleton(r.relation ?? ''), r.id] }));
+      await this.db.executeSet(set, true);
+    }
+    await this.db.execute(`PRAGMA user_version = ${SKELETON_VERSION}`);
   }
 
   async createList(name: string) {

@@ -16,10 +16,12 @@ for (let p = 1; p <= pdf.numPages; p++) {
 }
 console.log('cards indexed:', rows.length, '| empty name keys:', rows.filter((r) => !r.nameKey).length);
 
+for (const r of rows.filter((x) => x.serial === (process.env.SERIAL ?? '')))
+  console.log('SERIAL', r.serial, 'page', r.page, 'col', r.col, 'raw', JSON.stringify(r.raw), 'key', r.nameKey);
 const queries = (process.argv[3] ?? 'వర ప్రసాద్ ఆలూరి|బాలరాజు|కోటేశ్వరమ్మ|మాలకొండయ్య|ప్రేమల|balaraju|narayana|s|zzzz').split('|');
 for (const q of queries) {
   const hits = rows.map((r) => ({ r, d: nameDistance(r.nameKey, q) })).filter((h) => h.d !== Infinity).sort((a, b) => a.d - b.d);
-  const top = hits.slice(0, 3).map((h) => `#${h.r.serial} p${h.r.page}/c${h.r.col} d=${h.d} "${h.r.raw.slice(0, 22)}"`).join('  ');
+  const top = hits.slice(0, 40).map((h) => `#${h.r.serial} p${h.r.page}/c${h.r.col} d=${h.d}`).join('  ');
   console.log(`"${q}" -> ${hits.length} match(es)  ${top}`);
 }
 process.exit(0);
