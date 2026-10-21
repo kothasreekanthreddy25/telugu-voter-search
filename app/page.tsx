@@ -21,7 +21,6 @@ export default function Home() {
   const [results, setResults] = useState<Voter[]>([]);
   const [selected, setSelected] = useState<Voter | null>(null);
   const [typed, setTyped] = useState('');
-  const [showAll, setShowAll] = useState(false);
   const busy = useRef(false);
 
   const say = async (text: string) => { setMessage(text); await speak(text).catch(() => {}); };
@@ -56,7 +55,6 @@ export default function Home() {
         return;
       }
       setFilters(next);
-      setShowAll(false);
       setResults(found);
       setSelected(null);
       if (found.length === 1) await showVoter(found[0]);
@@ -124,34 +122,59 @@ export default function Home() {
 
       {selected && <VoterCard v={selected} big onSpeak={() => say(describeVoter(selected))} />}
 
-      {!selected && results.length > 1 && (
-        <section aria-label="Matches" className="space-y-2">
-          <p className="text-sm text-slate-600">{results.length} matches. Say a field to narrow (house number, father/husband name, part number), or say/tap a number.</p>
-          {(showAll ? results : results.slice(0, 10)).map((v, i) => (
-            v.img ? (
-              <button key={v.id} onClick={() => showVoter(v)} className="block w-full space-y-1 rounded-xl bg-white p-2 text-left shadow-sm">
-                <span className="flex items-center gap-2 text-sm"><span className="flex h-7 w-7 items-center justify-center rounded-full bg-indigo-600 text-white">{i + 1}</span><b>{where(v)}</b></span>
-                <CardImage v={v} className="w-full rounded border" />
-              </button>
-            ) : (
-            <button key={v.id} onClick={() => showVoter(v)} className="flex w-full items-center gap-3 rounded-xl bg-white p-3 text-left shadow-sm">
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-sm text-white">{i + 1}</span>
-              <span className="min-w-0"><b className="block truncate">{v.name}</b>
-                <span className="block truncate text-xs text-slate-500">{[v.relation, v.house && `ఇల్లు ${v.house}`, v.part && `పార్ట్ ${v.part}`, v.serial && `క్రమ ${v.serial}`].filter(Boolean).join(' · ')}</span></span>
-            </button>
-            )
-          ))}
-          {!showAll && results.length > 10 && <button onClick={() => setShowAll(true)} className="w-full rounded-xl border border-slate-300 py-2 text-slate-700">Show all {results.length}</button>}
-        </section>
-      )}
+      {results.length > 1 && <MatchSlider results={results} selected={selected} onPick={showVoter} />}
     </main>
+  );
+}
+
+/** Swipeable row of every matching card; the card that was picked gets a ring. */
+function MatchSlider({ results, selected, onPick }: { results: Voter[]; selected: Voter | null; onPick: (v: Voter) => void }) {
+  const [at, setAt] = useState(0);
+  return (
+    <section aria-label="Matches" className="space-y-2">
+      <p className="text-sm text-slate-600">
+        {results.length} matches ← swipe →. Tap one to hear it, or say a house number, father/husband name or part number to narrow down.
+      </p>
+      <div
+        className="-mx-5 flex snap-x snap-mandatory gap-3 overflow-x-auto px-5 pb-3"
+        onScroll={(e) => { const el = e.currentTarget; setAt(Math.round(el.scrollLeft / ((el.firstElementChild as HTMLElement)?.offsetWidth + 12 || 1))); }}
+      >
+        {results.map((v, i) => (
+          <button
+            key={v.id}
+            onClick={() => onPick(v)}
+            className={`w-[85%] shrink-0 snap-center space-y-1 rounded-xl bg-white p-2 text-left shadow-sm ${selected?.id === v.id ? 'ring-2 ring-indigo-600' : ''}`}
+          >
+            <span className="flex items-center gap-2 text-sm">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-white">{i + 1}</span>
+              <b className="truncate">{v.img ? where(v) : v.name}</b>
+            </span>
+            {v.img ? (
+              <CardImage v={v} className="w-full rounded border" />
+            ) : (
+              <span className="block truncate text-xs text-slate-500">{[v.relation, v.house && `ఇల్లు ${v.house}`, v.part && `పార్ట్ ${v.part}`, v.serial && `క్రమ ${v.serial}`].filter(Boolean).join(' · ')}</span>
+            )}
+          </button>
+        ))}
+      </div>
+      <p className="text-center text-xs text-slate-500" aria-live="polite">{Math.min(at + 1, results.length)} / {results.length}</p>
+    </section>
   );
 }
 
 function CardImage({ v, className }: { v: Voter; className?: string }) {
   const [src, setSrc] = useState<string | null>(null);
-  useEffect(() => { let on = true; getSnippet(v).then((s) => on && setSrc(s)); return () => { on = false; }; }, [v]);
-  return src ? <img src={src} alt="Voter card" className={className} /> : <div className={`${className ?? ''} aspect-[7/3] animate-pulse bg-slate-200`} />;
+  const box = useRef<HTMLDivElement>(null);
+  const [near, setNear] = useState(false);
+  useEffect(() => {
+    const el = box.current;
+    if (!el || typeof IntersectionObserver === 'undefined') return setNear(true);
+    const io = new IntersectionObserver(([e]) => e.isIntersecting && setNear(true), { rootMargin: '0px 400px' });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+  useEffect(() => { if (!near) return; let on = true; getSnippet(v).then((s) => on && setSrc(s)); return () => { on = false; }; }, [v, near]);
+  return src ? <img src={src} alt="Voter card" className={className} /> : <div ref={box} className={`${className ?? ''} aspect-[7/3] animate-pulse bg-slate-200`} />;
 }
 
 const where = (v: Voter) => `పేజీ ${v.page} · వరుస ${v.row} · కాలమ్ ${v.col} · క్రమ సంఖ్య ${v.serial}`;
