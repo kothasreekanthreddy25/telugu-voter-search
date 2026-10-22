@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS voters (
   id INTEGER PRIMARY KEY AUTOINCREMENT, list_id INTEGER NOT NULL,
   name TEXT NOT NULL, name_norm TEXT NOT NULL, relation TEXT, relation_norm TEXT,
   voter_id TEXT, house TEXT, part TEXT, serial TEXT, station TEXT,
-  name_key TEXT, rel_key TEXT, page TEXT, pdf_page INTEGER, card_col INTEGER, card_row INTEGER, img TEXT, card_y REAL);
+  name_key TEXT, rel_key TEXT, page TEXT, pdf_page INTEGER, card_col INTEGER, card_row INTEGER, img TEXT, card_y REAL, ward TEXT);
 CREATE INDEX IF NOT EXISTS idx_voter_id ON voters(voter_id);
 CREATE INDEX IF NOT EXISTS idx_part_serial ON voters(part, serial);
 CREATE INDEX IF NOT EXISTS idx_list ON voters(list_id);
@@ -23,11 +23,11 @@ CREATE INDEX IF NOT EXISTS idx_list ON voters(list_id);
 // Columns added after the first release; older installs get them through ALTER TABLE.
 const LATER_COLUMNS: [string, string][] = [
   ['name_key', 'TEXT'], ['rel_key', 'TEXT'], ['page', 'TEXT'], ['pdf_page', 'INTEGER'],
-  ['card_col', 'INTEGER'], ['card_row', 'INTEGER'], ['img', 'TEXT'], ['card_y', 'REAL'],
+  ['card_col', 'INTEGER'], ['card_row', 'INTEGER'], ['img', 'TEXT'], ['card_y', 'REAL'], ['ward', 'TEXT'],
 ];
 
 const INSERT =
-  'INSERT INTO voters (list_id,name,name_norm,relation,relation_norm,voter_id,house,part,serial,station,name_key,rel_key,page,pdf_page,card_col,card_row,img,card_y) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)';
+  'INSERT INTO voters (list_id,name,name_norm,relation,relation_norm,voter_id,house,part,serial,station,name_key,rel_key,page,pdf_page,card_col,card_row,img,card_y,ward) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)';
 
 /** Exact-match filters only; name and father/husband name are matched approximately in JS. */
 export function buildWhere(f: Filters): { sql: string; params: string[] } {
@@ -50,10 +50,11 @@ const toVoter = (r: Row): Voter => ({
   page: r.page ? String(r.page) : undefined, pdfPage: r.pdf_page ? Number(r.pdf_page) : undefined,
   col: r.card_col ? Number(r.card_col) : undefined, row: r.card_row ? Number(r.card_row) : undefined,
   img: r.img ? String(r.img) : undefined, cardY: r.card_y != null ? Number(r.card_y) : undefined,
+  ward: r.ward ? String(r.ward) : undefined,
 });
 const insertParams = (listId: number, v: Voter) => [
   listId, v.name, normName(v.name), v.relation, normName(v.relation), normId(v.voterId), v.house, v.part, v.serial, v.station,
-  v.nameKey ?? skeleton(v.name), v.relKey ?? skeleton(v.relation), v.page ?? null, v.pdfPage ?? null, v.col ?? null, v.row ?? null, v.img ?? null, v.cardY ?? null,
+  v.nameKey ?? skeleton(v.name), v.relKey ?? skeleton(v.relation), v.page ?? null, v.pdfPage ?? null, v.col ?? null, v.row ?? null, v.img ?? null, v.cardY ?? null, v.ward ?? null,
 ];
 
 /**

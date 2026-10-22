@@ -9,6 +9,7 @@ export interface Voter {
   serial: string;
   station: string;
   /** Set for voters read from a PDF roll: where the card is and its cropped picture. */
+  ward?: string;      // ward number printed at the top of the roll page
   page?: string;      // printed page number of the roll
   pdfPage?: number;   // physical page in the PDF
   col?: number;       // 1-3, left to right

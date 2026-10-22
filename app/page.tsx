@@ -106,7 +106,7 @@ export default function Home() {
       </div>
 
       <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); if (typed.trim()) { handle(typed.trim()); setTyped(''); } }}>
-        <input value={typed} onChange={(e) => setTyped(e.target.value)} placeholder="Or type, e.g. పేరు రాము · ఓటరు ఐడి ABC1234567"
+        <input value={typed} onChange={(e) => setTyped(e.target.value)} placeholder="Or type: 823 · రాము · ఓటరు ఐడి ABC1234567"
           className="min-w-0 flex-1 rounded-xl border border-slate-300 px-3 py-2" />
         <button className="rounded-xl bg-slate-800 px-4 text-white">Go</button>
       </form>
@@ -177,7 +177,7 @@ function CardImage({ v, className }: { v: Voter; className?: string }) {
   return src ? <img src={src} alt="Voter card" className={className} /> : <div ref={box} className={`${className ?? ''} aspect-[7/3] animate-pulse bg-slate-200`} />;
 }
 
-const where = (v: Voter) => `పేజీ ${v.page} · వరుస ${v.row} · కాలమ్ ${v.col} · క్రమ సంఖ్య ${v.serial}`;
+const where = (v: Voter) => `${v.ward ? `వార్డు ${v.ward} · ` : ''}పేజీ ${v.page} · వరుస ${v.row} · కాలమ్ ${v.col} · క్రమ సంఖ్య ${v.serial}`;
 
 function VoterCard({ v, big, onSpeak }: { v: Voter; big?: boolean; onSpeak: () => void }) {
   const rows: [string, string][] = [
@@ -188,12 +188,15 @@ function VoterCard({ v, big, onSpeak }: { v: Voter; big?: boolean; onSpeak: () =
     return (
       <section className="space-y-3 rounded-2xl bg-white p-3 shadow">
         <CardImage v={v} className="w-full rounded-lg border" />
-        <dl className="grid grid-cols-3 gap-2 text-center">
-          {([['పేజీ', v.page], ['వరుస', v.row], ['కాలమ్', v.col], ['క్రమ సంఖ్య', v.serial]] as const).map(([k, val], i) => (
-            <div key={k} className={`rounded-xl bg-indigo-50 py-2 ${i === 3 ? 'col-span-3' : ''}`}>
+        <dl className={`grid gap-2 text-center ${v.ward ? 'grid-cols-4' : 'grid-cols-3'}`}>
+          {([...(v.ward ? [['వార్డు', v.ward]] : []), ['పేజీ', v.page], ['వరుస', v.row], ['కాలమ్', v.col]] as [string, string | number | undefined][]).map(([k, val]) => (
+            <div key={k} className="rounded-xl bg-indigo-50 py-2">
               <dt className="text-xs text-slate-600">{k}</dt><dd className="text-2xl font-bold text-indigo-700">{val}</dd>
             </div>
           ))}
+          <div className={`rounded-xl bg-indigo-100 py-2 ${v.ward ? 'col-span-4' : 'col-span-3'}`}>
+            <dt className="text-xs text-slate-600">క్రమ సంఖ్య</dt><dd className="text-3xl font-bold text-indigo-800">{v.serial}</dd>
+          </div>
         </dl>
         <button onClick={onSpeak} className="w-full rounded-xl border border-indigo-600 py-2 text-indigo-700">🔊 మళ్ళీ చెప్పు · Repeat</button>
       </section>

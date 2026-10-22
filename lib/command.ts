@@ -40,6 +40,8 @@ export function parseCommand(raw: string): Command | null {
       let value = stripFillers((after.trim() || before.trim()).trim());
       if (!value) continue;
       if (field === 'voterId') value = normId(value);
+      // Voter IDs always contain letters, so "id 823" can only mean the serial number printed on the card.
+      if (field === 'voterId' && /^\d{1,5}$/.test(value)) return { field: 'serial', value };
       return { field, value };
     }
   }
@@ -47,5 +49,7 @@ export function parseCommand(raw: string): Command | null {
   const bare = stripFillers(text);
   if (!bare) return null;
   if (/^[a-z]{2,4}\s?\d{5,}$/i.test(bare)) return { field: 'voterId', value: normId(bare) };
+  // A number on its own is a serial number.
+  if (/^\d{1,5}$/.test(bare)) return { field: 'serial', value: bare };
   return { field: 'name', value: bare };
 }

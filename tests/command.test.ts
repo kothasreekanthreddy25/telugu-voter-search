@@ -37,3 +37,12 @@ test('where clause is exact-match only', () => {
   assert.deepEqual(w.params, ['X1', '7-132']);
   assert.equal(buildWhere({}).sql, '1');
 });
+
+test('a bare number is a serial number', () => {
+  assert.deepEqual(parseCommand('823'), { field: 'serial', value: '823' });
+  assert.deepEqual(parseCommand('౮౨౩'), { field: 'serial', value: '823' });
+  assert.deepEqual(parseCommand('number 823'), { field: 'serial', value: '823' });
+  assert.deepEqual(parseCommand('id 823'), { field: 'serial', value: '823' });
+  assert.deepEqual(parseCommand('ఓటరు ఐడి ydr0525701'), { field: 'voterId', value: 'YDR0525701' });
+  assert.deepEqual(parseCommand('రాము'), { field: 'name', value: 'రాము' });
+});
